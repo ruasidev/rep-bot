@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
     PRIMARY KEY (guild_id, user_id)
 );
 
--- one row per scored message, no content; used for the rating and its trend
 CREATE TABLE IF NOT EXISTS message_scores (
     id        INTEGER PRIMARY KEY,
     guild_id  INTEGER NOT NULL,
@@ -25,7 +24,6 @@ CREATE TABLE IF NOT EXISTS message_scores (
     FOREIGN KEY (guild_id, user_id) REFERENCES users (guild_id, user_id) ON DELETE CASCADE
 );
 
--- low-scoring messages only
 CREATE TABLE IF NOT EXISTS flagged_messages (
     id         INTEGER PRIMARY KEY,
     guild_id   INTEGER NOT NULL,
@@ -54,7 +52,7 @@ def init_db():
 
 
 def _timestamp(dt: datetime | None = None) -> str:
-    """Times are stored as UTC ISO 8601 strings so they compare correctly as text."""
+    """times are stored as UTC ISO 8601 strings"""
     return (dt or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
 
 
@@ -74,7 +72,7 @@ def set_rating(guild_id: int, user_id: int, rating: float):
 
 
 def add_message_score(guild_id: int, user_id: int, score: float, scored_at: datetime | None = None):
-    """Record a scored message and bump the user's messages_analyzed count."""
+    """record a scored message and increment the user's messages_analyzed count"""
     with conn:
         conn.execute(
             "INSERT INTO users (guild_id, user_id, messages_analyzed, updated_at) VALUES (?, ?, 1, ?) "
@@ -119,7 +117,7 @@ def add_flagged_message(
 
 
 def get_flagged_messages(guild_id: int, user_id: int) -> list[sqlite3.Row]:
-    """Flags a moderator hasn't removed, newest first."""
+    """flags a moderator hasn't removed"""
     return conn.execute(
         "SELECT * FROM flagged_messages WHERE guild_id = ? AND user_id = ? AND removed = 0 ORDER BY sent_at DESC",
         (guild_id, user_id),
