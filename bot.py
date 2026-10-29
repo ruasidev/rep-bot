@@ -7,13 +7,14 @@ from discord.ext import commands
 
 import db
 from config import MAX_STARS, REP_CHANGE_MONTHS, TESTING, TOKEN
-from reputation import get_reputation, get_reputation_change
+from reputation import analyze_message, get_reputation, get_reputation_change
 
 EMOJI_DIR = Path(__file__).parent / "assets" / "emojis"
 
 log = logging.getLogger("rep-bot")
 
 intents = discord.Intents.default()
+intents.message_content = True  # also needs to be turned on in the Discord Developer Portal
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 star_emojis: dict[str, str] = {}
@@ -54,6 +55,13 @@ async def setup_hook():
 async def on_ready():
     log.info("Logged in as %s (ID: %s)", bot.user, bot.user.id)
     log.info(f"Testing mode is {"on" if TESTING else "off"}")
+
+
+@bot.listen()
+async def on_message(message: discord.Message):
+    if message.author.bot or message.guild is None or not message.content:
+        return
+    analyze_message(message)
 
 
 @bot.tree.command(name="ping", description="Check that the bot is alive")
