@@ -1,21 +1,14 @@
 import logging
-import os
 from pathlib import Path
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
 
 import db
+from config import MAX_STARS, REP_CHANGE_MONTHS, TESTING, TOKEN
 from reputation import get_reputation, get_reputation_change
 
-load_dotenv()
-TOKEN = os.getenv("TOKEN")
-TESTING = bool(os.getenv("TESTING"))
-
-MAX_STARS = 5
-REP_CHANGE_MONTHS = 3
 EMOJI_DIR = Path(__file__).parent / "assets" / "emojis"
 
 log = logging.getLogger("rep-bot")
@@ -50,7 +43,8 @@ def star_row(rating: float) -> str:
 
 @bot.event
 async def setup_hook():
-    db.init_db()
+    db_path = db.init_db()
+    log.info("Using database at %s", db_path)
     await load_star_emojis()
     synced = await bot.tree.sync()
     log.info("Synced %d slash command(s)", len(synced))

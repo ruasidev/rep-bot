@@ -1,15 +1,15 @@
 import sqlite3
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "rep.db"
-DEFAULT_RATING = 5.0
+import config
 
-SCHEMA = f"""
+SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     guild_id          INTEGER NOT NULL,
     user_id           INTEGER NOT NULL,
-    rating            REAL NOT NULL DEFAULT {DEFAULT_RATING} CHECK (rating BETWEEN 1 AND 5),
+    rating            REAL NOT NULL CHECK (rating BETWEEN 1 AND 5),
     messages_analyzed INTEGER NOT NULL DEFAULT 0,
     updated_at        TEXT NOT NULL,
     PRIMARY KEY (guild_id, user_id)
@@ -42,13 +42,25 @@ CREATE INDEX IF NOT EXISTS message_scores_user ON message_scores (guild_id, user
 CREATE INDEX IF NOT EXISTS flagged_messages_user ON flagged_messages (guild_id, user_id);
 """
 
-conn = sqlite3.connect(DB_PATH)
-conn.row_factory = sqlite3.Row
-conn.execute("PRAGMA foreign_keys = ON")
+conn: sqlite3.Connection | None = None
 
 
-def init_db():
+@dataclass
+class UserStats:
+    rating: float
+    messages_analyzed: int
+    recent_scores: list[float]  # oldest first
+
+
+def init_db() -> Path:
+    """open the db at config.DB_PATH and create missing tables"""
+    global conn
+    config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(config.DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    return config.DB_PATH
 
 
 def _timestamp(dt: datetime | None = None) -> str:
@@ -56,45 +68,23 @@ def _timestamp(dt: datetime | None = None) -> str:
     return (dt or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
 
 
-def get_user(guild_id: int, user_id: int) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)
-    ).fetchone()
-
-
-def set_rating(guild_id: int, user_id: int, rating: float):
-    with conn:
-        conn.execute(
-            "INSERT INTO users (guild_id, user_id, rating, updated_at) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT (guild_id, user_id) DO UPDATE SET rating = excluded.rating, updated_at = excluded.updated_at",
-            (guild_id, user_id, rating, _timestamp()),
-        )
-
-
-def add_message_score(guild_id: int, user_id: int, score: float, scored_at: datetime | None = None):
+def save_score(guild_id: int, user_id: int, score: float):
     """record a scored message and increment the user's messages_analyzed count"""
+    now = _timestamp()
     with conn:
         conn.execute(
-            "INSERT INTO users (guild_id, user_id, messages_analyzed, updated_at) VALUES (?, ?, 1, ?) "
+            "INSERT INTO users (guild_id, user_id, rating, messages_analyzed, updated_at) VALUES (?, ?, ?, 1, ?) "
             "ON CONFLICT (guild_id, user_id) DO UPDATE SET "
             "messages_analyzed = messages_analyzed + 1, updated_at = excluded.updated_at",
-            (guild_id, user_id, _timestamp()),
+            (guild_id, user_id, config.DEFAULT_RATING, now),
         )
         conn.execute(
             "INSERT INTO message_scores (guild_id, user_id, score, scored_at) VALUES (?, ?, ?, ?)",
-            (guild_id, user_id, score, _timestamp(scored_at)),
+            (guild_id, user_id, score, now),
         )
 
 
-def get_scores_since(guild_id: int, user_id: int, since: datetime) -> list[float]:
-    rows = conn.execute(
-        "SELECT score FROM message_scores WHERE guild_id = ? AND user_id = ? AND scored_at >= ? ORDER BY scored_at",
-        (guild_id, user_id, _timestamp(since)),
-    )
-    return [row["score"] for row in rows]
-
-
-def add_flagged_message(
+def save_flagged_message(
     guild_id: int,
     user_id: int,
     channel_id: int,
@@ -106,13 +96,40 @@ def add_flagged_message(
 ):
     with conn:
         conn.execute(
-            "INSERT OR IGNORE INTO users (guild_id, user_id, updated_at) VALUES (?, ?, ?)",
-            (guild_id, user_id, _timestamp()),
+            "INSERT OR IGNORE INTO users (guild_id, user_id, rating, updated_at) VALUES (?, ?, ?, ?)",
+            (guild_id, user_id, config.DEFAULT_RATING, _timestamp()),
         )
         conn.execute(
             "INSERT INTO flagged_messages (guild_id, user_id, channel_id, message_id, content, score, reason, sent_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (guild_id, user_id, channel_id, message_id, content, score, reason, _timestamp(sent_at)),
+        )
+
+
+def get_user_stats(guild_id: int, user_id: int, months: int = config.REP_CHANGE_MONTHS) -> UserStats:
+    """rating, messages analyzed, and scores from the last `months` months for the trend"""
+    user = conn.execute(
+        "SELECT rating, messages_analyzed FROM users WHERE guild_id = ? AND user_id = ?",
+        (guild_id, user_id),
+    ).fetchone()
+    if user is None:
+        return UserStats(config.DEFAULT_RATING, 0, [])
+
+    since = datetime.now(UTC) - timedelta(days=30 * months)
+    rows = conn.execute(
+        "SELECT score FROM message_scores WHERE guild_id = ? AND user_id = ? AND scored_at >= ? "
+        "ORDER BY scored_at, id",
+        (guild_id, user_id, _timestamp(since)),
+    )
+    return UserStats(user["rating"], user["messages_analyzed"], [row["score"] for row in rows])
+
+
+def update_rating(guild_id: int, user_id: int, rating: float):
+    with conn:
+        conn.execute(
+            "INSERT INTO users (guild_id, user_id, rating, updated_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (guild_id, user_id) DO UPDATE SET rating = excluded.rating, updated_at = excluded.updated_at",
+            (guild_id, user_id, rating, _timestamp()),
         )
 
 
