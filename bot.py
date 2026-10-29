@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+import db
 from reputation import get_reputation, get_reputation_change
 
 load_dotenv()
@@ -49,6 +50,7 @@ def star_row(rating: float) -> str:
 
 @bot.event
 async def setup_hook():
+    db.init_db()
     await load_star_emojis()
     synced = await bot.tree.sync()
     log.info("Synced %d slash command(s)", len(synced))
@@ -67,9 +69,10 @@ async def ping(interaction: discord.Interaction):
 
 @bot.tree.command(name="rep", description="Check the reputation of a user")
 @app_commands.describe(target="The user you want to check the reputation of")
+@app_commands.guild_only()
 async def rep(interaction: discord.Interaction, target: discord.Member):
-    rating = get_reputation(target.id)
-    change = get_reputation_change(target.id, REP_CHANGE_MONTHS)
+    rating = get_reputation(interaction.guild_id, target.id)
+    change = get_reputation_change(interaction.guild_id, target.id, REP_CHANGE_MONTHS)
 
     embed = discord.Embed(
         title=f"@{target.name}'s reputation",
