@@ -11,6 +11,7 @@ from reputation import get_reputation, get_reputation_change
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+TESTING = bool(os.getenv("TESTING"))
 
 MAX_STARS = 5
 REP_CHANGE_MONTHS = 3
@@ -56,6 +57,7 @@ async def setup_hook():
 @bot.event
 async def on_ready():
     log.info("Logged in as %s (ID: %s)", bot.user, bot.user.id)
+    log.info(f"Testing mode is {"on" if TESTING else "off"}")
 
 
 @bot.tree.command(name="ping", description="Check that the bot is alive")
@@ -76,7 +78,7 @@ async def rep(interaction: discord.Interaction, target: discord.Member):
     arrow = "🔺" if change >= 0 else "🔻"
     embed.set_footer(text=f"{change:+d} {arrow} in {REP_CHANGE_MONTHS} months")
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, ephemeral=TESTING)    # may set ephemeral=True 
 
 
 if __name__ == "__main__":
