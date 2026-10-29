@@ -78,7 +78,8 @@ async def rep(interaction: discord.Interaction, target: discord.Member):
     arrow = "🔺" if change >= 0 else "🔻"
     embed.set_footer(text=f"{change:+d} {arrow} in {REP_CHANGE_MONTHS} months")
 
-    await interaction.response.send_message(embed=embed, ephemeral=TESTING)    # may set ephemeral=True 
+    # if TESTING=1 set in `.env`, `/rep` will not be ephemeral
+    await interaction.response.send_message(embed=embed, ephemeral=(not TESTING))    # may set ephemeral=True 
 
 
 if __name__ == "__main__":
