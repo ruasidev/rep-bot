@@ -1,5 +1,3 @@
-import random
-
 import discord
 
 import config
@@ -41,7 +39,7 @@ def get_reputation(guild_id: int, user_id: int) -> float:
     return round(db.get_user_stats(guild_id, user_id).rating * 2) / 2
 
 
-# TODO: calculate from the user's message scores instead of returning random values
 def get_reputation_change(guild_id: int, user_id: int, months: int) -> int:
-    """How much the user's reputation score changed over the last `months` months."""
-    return random.randint(-50, 50)
+    """positive messages minus negative messages over the last `months` months"""
+    scores = db.get_user_stats(guild_id, user_id, months).recent_scores
+    return sum(1 if score > 0 else -1 for score in scores if score != 0)

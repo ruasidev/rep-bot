@@ -1,6 +1,6 @@
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import config
@@ -49,6 +49,7 @@ conn: sqlite3.Connection | None = None
 class UserStats:
     rating: float
     messages_analyzed: int
+    recent_scores: list[float]  # oldest first
 
 
 def init_db() -> Path:
@@ -105,15 +106,22 @@ def save_flagged_message(
         )
 
 
-def get_user_stats(guild_id: int, user_id: int) -> UserStats:
-    """rating and number of messages analyzed"""
+def get_user_stats(guild_id: int, user_id: int, months: int = config.REP_CHANGE_MONTHS) -> UserStats:
+    """rating, messages analyzed, and scores from the last `months` months for the trend"""
     user = conn.execute(
         "SELECT rating, messages_analyzed FROM users WHERE guild_id = ? AND user_id = ?",
         (guild_id, user_id),
     ).fetchone()
     if user is None:
-        return UserStats(config.DEFAULT_RATING, 0)
-    return UserStats(user["rating"], user["messages_analyzed"])
+        return UserStats(config.DEFAULT_RATING, 0, [])
+
+    since = datetime.now(UTC) - timedelta(days=30 * months)
+    rows = conn.execute(
+        "SELECT score FROM message_scores WHERE guild_id = ? AND user_id = ? AND scored_at >= ? "
+        "ORDER BY scored_at, id",
+        (guild_id, user_id, _timestamp(since)),
+    )
+    return UserStats(user["rating"], user["messages_analyzed"], [row["score"] for row in rows])
 
 
 def update_rating(guild_id: int, user_id: int, rating: float):
