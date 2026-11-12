@@ -1,5 +1,6 @@
 import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import config
@@ -59,6 +60,27 @@ def init_db() -> Path:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
     return config.DB_PATH
+
+
+def _timestamp(dt: datetime | None = None) -> str:
+    """times are stored as UTC ISO 8601 strings"""
+    return (dt or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
+
+
+def save_score(guild_id: int, user_id: int, score: float):
+    """record a scored message and increment the user's messages_analyzed count"""
+    now = _timestamp()
+    with conn:
+        conn.execute(
+            "INSERT INTO users (guild_id, user_id, rating, messages_analyzed, updated_at) VALUES (?, ?, ?, 1, ?) "
+            "ON CONFLICT (guild_id, user_id) DO UPDATE SET "
+            "messages_analyzed = messages_analyzed + 1, updated_at = excluded.updated_at",
+            (guild_id, user_id, config.DEFAULT_RATING, now),
+        )
+        conn.execute(
+            "INSERT INTO message_scores (guild_id, user_id, score, scored_at) VALUES (?, ?, ?, ?)",
+            (guild_id, user_id, score, now),
+        )
 
 
 def get_user_stats(guild_id: int, user_id: int) -> UserStats:
