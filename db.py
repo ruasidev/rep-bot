@@ -83,6 +83,28 @@ def save_score(guild_id: int, user_id: int, score: float):
         )
 
 
+def save_flagged_message(
+    guild_id: int,
+    user_id: int,
+    channel_id: int,
+    message_id: int,
+    content: str,
+    score: float,
+    reason: str | None,
+    sent_at: datetime,
+):
+    with conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO users (guild_id, user_id, rating, updated_at) VALUES (?, ?, ?, ?)",
+            (guild_id, user_id, config.DEFAULT_RATING, _timestamp()),
+        )
+        conn.execute(
+            "INSERT INTO flagged_messages (guild_id, user_id, channel_id, message_id, content, score, reason, sent_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (guild_id, user_id, channel_id, message_id, content, score, reason, _timestamp(sent_at)),
+        )
+
+
 def get_user_stats(guild_id: int, user_id: int) -> UserStats:
     """rating and number of messages analyzed"""
     user = conn.execute(
@@ -92,3 +114,20 @@ def get_user_stats(guild_id: int, user_id: int) -> UserStats:
     if user is None:
         return UserStats(config.DEFAULT_RATING, 0)
     return UserStats(user["rating"], user["messages_analyzed"])
+
+
+def update_rating(guild_id: int, user_id: int, rating: float):
+    with conn:
+        conn.execute(
+            "INSERT INTO users (guild_id, user_id, rating, updated_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (guild_id, user_id) DO UPDATE SET rating = excluded.rating, updated_at = excluded.updated_at",
+            (guild_id, user_id, rating, _timestamp()),
+        )
+
+
+def get_flagged_messages(guild_id: int, user_id: int) -> list[sqlite3.Row]:
+    """flags a moderator hasn't removed"""
+    return conn.execute(
+        "SELECT * FROM flagged_messages WHERE guild_id = ? AND user_id = ? AND removed = 0 ORDER BY sent_at DESC",
+        (guild_id, user_id),
+    ).fetchall()
