@@ -1,6 +1,16 @@
 import random
 
+import discord
+
 import db
+from analysis import score_message
+
+
+def analyze_message(message: discord.Message):
+    """score a message and save the score"""
+    guild_id, user_id = message.guild.id, message.author.id
+    score = score_message(message.content)
+    db.save_score(guild_id, user_id, score)
 
 
 def get_reputation(guild_id: int, user_id: int) -> float:
