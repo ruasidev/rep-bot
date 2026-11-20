@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+import actions
 import db
 from config import MAX_STARS, REP_CHANGE_MONTHS, TESTING, TOKEN
 from reputation import analyze_message, get_reputation, get_reputation_change
@@ -61,7 +62,8 @@ async def on_ready():
 async def on_message(message: discord.Message):
     if message.author.bot or message.guild is None or not message.content:
         return
-    analyze_message(message)
+    score = analyze_message(message)
+    await actions.respond(message, score)
 
 
 @bot.tree.command(name="ping", description="Check that the bot is alive")
