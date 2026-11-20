@@ -43,5 +43,5 @@ async def respond(message: discord.Message, score: float):
     """react to messages that score low enough to get flagged"""
     if score <= config.FLAG_THRESHOLD:
         await react(message, "🤨")
-
+        await react(message, "🚩")
 
