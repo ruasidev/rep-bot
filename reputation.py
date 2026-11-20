@@ -10,8 +10,8 @@ def message_stars(score: float) -> float:
     return config.MAX_STARS + (config.MAX_STARS - 1) * min(score, 0)
 
 
-def analyze_message(message: discord.Message):
-    """score a message, move the author's rating toward it, and flag it if it's very negative"""
+def analyze_message(message: discord.Message) -> float:
+    """score a message, move the author's rating toward it, and flag it if it's very negative. returns the score"""
     guild_id, user_id = message.guild.id, message.author.id
     score = score_message(message.content)
     db.save_score(guild_id, user_id, score)
@@ -32,6 +32,7 @@ def analyze_message(message: discord.Message):
             "negative words: " + ", ".join(words) if words else None,
             message.created_at,
         )
+    return score
 
 
 def get_reputation(guild_id: int, user_id: int) -> float:
